@@ -1,5 +1,5 @@
 <mujoco model="tidybot pickup scene">
-  <include file="tidybot_wx250s_bimanual.xml"/>
+  <include file="tidybot_wx200_bimanual.xml"/>
 
   <statistic center="0 0 0.525" extent="1.1" meansize="0.05"/>
 

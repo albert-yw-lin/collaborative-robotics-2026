@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """
-TidyBot2 with Bimanual WX250S Arms - MuJoCo Simulation Demo
+TidyBot2 with Bimanual WX200 Arms - MuJoCo Simulation Demo
 
 This script demonstrates how to:
-1. Load the TidyBot2 mobile robot with dual WX250S 6-DOF arms in MuJoCo
+1. Load the TidyBot2 mobile robot with dual WX200 5-DOF arms in MuJoCo
 2. Control the mobile base (x, y, rotation) with configurable speed
-3. Control both arm joints (left/right: waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate)
+3. Control both arm joints (left/right: waist, shoulder, elbow, wrist_angle, wrist_rotate)
 4. Control both grippers (open/close)
+5. Control the 2-DOF pan-tilt camera system
+6. Capture RGB and depth images from the simulated Intel RealSense D435
 
-The demo drives the robot forward 1 meter while performing a synchronized arm wave motion.
+The demo drives the robot forward 1 meter while performing a synchronized arm wave motion,
+then demonstrates camera pan-tilt control and captures images at multiple positions.
 
 Speed Control:
     Base movement speed is controlled by incrementally moving the target position
@@ -22,6 +25,15 @@ import numpy as np
 import time
 from pathlib import Path
 
+# For saving captured images
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    print("Note: PIL not installed. Images will be saved as numpy arrays (.npy)")
+    print("      Install with: pip install pillow")
+
 
 # ==============================================================================
 # CONFIGURATION - Adjust these values to change robot behavior
@@ -30,20 +42,129 @@ from pathlib import Path
 # --- Base Movement Speed ---
 # These control how fast the base moves by limiting the rate of target position change.
 # The actual motion will be smooth due to the position controller in the actuator.
-BASE_LINEAR_SPEED = 0.1      # meters per second (forward/backward and strafe)
+BASE_LINEAR_SPEED = 0.3      # meters per second (forward/backward and strafe)
 BASE_ANGULAR_SPEED = 1.0     # radians per second (rotation)
 
 # --- Motion Targets ---
 # Final goal positions for the demo
-TARGET_X_POSITION = 1.0      # meters (how far forward to drive)
+TARGET_X_POSITION = 0.75      # meters (how far forward to drive)
 TARGET_Y_POSITION = 0.0      # meters (lateral position, 0 = no strafe)
 TARGET_THETA = 0.0           # radians (final rotation, 0 = no rotation)
 
 # --- Arm Motion Timing ---
-ARM_RAISE_DURATION = 5.0     # seconds to raise arms
-ARM_WAVE_DURATION = 5.0      # seconds to wave
+ARM_RAISE_DURATION = 3.0     # seconds to raise arms
+ARM_WAVE_DURATION = 3.0      # seconds to wave
 ARM_WAVE_FREQUENCY = 2.0     # Hz (oscillations per second)
 ARM_WAVE_AMPLITUDE = 0.5     # radians (wave amplitude)
+
+# --- Camera Pan-Tilt Settings ---
+# The pan-tilt system has 2 degrees of freedom:
+#   - Pan:  rotates camera left/right, range: -1.57 to +1.57 rad (-90° to +90°)
+#   - Tilt: rotates camera down/up,    range: -1.57 to +1.31 rad (-90° to +75°)
+CAMERA_PAN_SPEED = 0.5       # radians per second
+CAMERA_TILT_SPEED = 0.5      # radians per second
+
+# Positions to capture images at: list of (pan, tilt) in radians
+# The camera will move to each position and capture RGB + depth images
+CAMERA_CAPTURE_POSITIONS = [
+    (0.0, 0.0),       # Center (looking straight ahead)
+    (-0.5, 0.0),      # Pan left 30°
+    (0.5, 0.0),       # Pan right 30°
+    (0.0, -0.4),      # Tilt down 23°
+    (0.0, 0.3),       # Tilt up 17°
+]
+
+# --- Image Capture Settings ---
+CAPTURE_WIDTH = 640          # Image width in pixels
+CAPTURE_HEIGHT = 480         # Image height in pixels
+
+
+# ==============================================================================
+# IMAGE CAPTURE FUNCTIONS
+# ==============================================================================
+
+def capture_rgb_image(renderer, data, camera_name="d435_rgb"):
+    """
+    Capture an RGB image from the specified camera.
+
+    Args:
+        renderer: MuJoCo Renderer object
+        data: MuJoCo simulation data
+        camera_name: Name of camera defined in XML (default: "d435_rgb")
+
+    Returns:
+        numpy array of shape (height, width, 3) with RGB values 0-255
+    """
+    # Point renderer at the named camera and render the scene
+    renderer.update_scene(data, camera=camera_name)
+
+    # Render the scene - returns RGB image as numpy array (height, width, 3)
+    rgb = renderer.render()
+
+    # MuJoCo renders images upside-down, so flip vertically
+    rgb = np.flipud(rgb)
+
+    return rgb
+
+
+def capture_depth_image(renderer, data, camera_name="d435_depth"):
+    """
+    Capture a depth image from the specified camera.
+
+    Args:
+        renderer: MuJoCo Renderer object
+        data: MuJoCo simulation data
+        camera_name: Name of camera defined in XML (default: "d435_depth")
+
+    Returns:
+        numpy array of shape (height, width) with depth values (0-1 normalized)
+    """
+    # Point renderer at the named camera
+    renderer.update_scene(data, camera=camera_name)
+
+    # Enable depth rendering mode
+    renderer.enable_depth_rendering()
+
+    # Render and get depth buffer - returns (height, width) array
+    depth = renderer.render()
+
+    # Disable depth rendering for next RGB capture
+    renderer.disable_depth_rendering()
+
+    # Flip vertically to match RGB orientation
+    depth = np.flipud(depth)
+
+    return depth
+
+
+def save_image(image, filepath):
+    """
+    Save an image to disk.
+
+    Args:
+        image: numpy array (RGB or depth)
+        filepath: Path to save the image
+    """
+    filepath = Path(filepath)
+
+    if PIL_AVAILABLE:
+        if len(image.shape) == 3:
+            # RGB image - save directly
+            img = Image.fromarray(image)
+            img.save(filepath)
+        else:
+            # Depth image - normalize to 0-255 for visualization
+            depth_normalized = image - image.min()
+            if depth_normalized.max() > 0:
+                depth_normalized = (depth_normalized / depth_normalized.max() * 255)
+            img = Image.fromarray(depth_normalized.astype(np.uint8), mode='L')
+            img.save(filepath)
+        print(f"    Saved: {filepath}")
+    else:
+        # Save as numpy array if PIL not available
+        npy_path = filepath.with_suffix('.npy')
+        np.save(npy_path, image)
+        print(f"    Saved: {npy_path}")
 
 
 def main():
@@ -53,7 +174,7 @@ def main():
     # The scene XML file includes the robot, floor, and lighting
     # Get path relative to this script's location
     script_dir = Path(__file__).parent
-    model_path = script_dir / "../assets/mujoco/scene_wx250s_bimanual.xml"
+    model_path = script_dir / "../assets/mujoco/scene_wx200_bimanual.xml"
     model_path = model_path.resolve()  # Convert to absolute path
     model = mujoco.MjModel.from_xml_path(str(model_path))  # Static model definition
     data = mujoco.MjData(model)  # Dynamic simulation state (positions, velocities, etc.)
@@ -85,47 +206,65 @@ def main():
     base_ctrl_y = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "joint_y")      # Target y position (meters)
     base_ctrl_theta = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "joint_th") # Target rotation (radians)
 
-    # --- Right WX250S Arm Actuators (6 joints) ---
-    # The arm has 6 degrees of freedom, from base to end-effector:
+    # --- Right WX200 Arm Actuators (5 joints) ---
+    # The arm has 5 degrees of freedom, from base to end-effector:
     right_arm_ctrl_waist = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_waist")            # Rotates entire arm left/right
     right_arm_ctrl_shoulder = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_shoulder")      # Raises/lowers upper arm
     right_arm_ctrl_elbow = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_elbow")            # Bends the elbow
-    right_arm_ctrl_forearm_roll = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_forearm_roll")  # Rotates forearm
     right_arm_ctrl_wrist_angle = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_wrist_angle")    # Bends wrist up/down
     right_arm_ctrl_wrist_rotate = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_wrist_rotate")  # Rotates wrist
 
-    # --- Right Gripper Actuator ---
-    right_gripper_ctrl = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_fingers_actuator")  # 0 = open, 255 = closed
+    # --- Right Gripper Actuators (2 finger joints) ---
+    right_gripper_ctrl_left_finger = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_left_finger")  # Left finger (0 = open, 0.022 = closed)
+    right_gripper_ctrl_right_finger = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_right_finger")  # Right finger (0 = open, 0.022 = closed)
 
-    # --- Left WX250S Arm Actuators (6 joints) ---
+    # --- Left WX200 Arm Actuators (5 joints) ---
     left_arm_ctrl_waist = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_waist")
     left_arm_ctrl_shoulder = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_shoulder")
     left_arm_ctrl_elbow = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_elbow")
-    left_arm_ctrl_forearm_roll = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_forearm_roll")
     left_arm_ctrl_wrist_angle = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_wrist_angle")
     left_arm_ctrl_wrist_rotate = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_wrist_rotate")
 
-    # --- Left Gripper Actuator ---
-    left_gripper_ctrl = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_fingers_actuator")
+    # --- Left Gripper Actuators (2 finger joints) ---
+    left_gripper_ctrl_left_finger = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_left_finger")  # Left finger (0 = open, 0.022 = closed)
+    left_gripper_ctrl_right_finger = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "left_right_finger")  # Right finger (0 = open, 0.022 = closed)
+
+    # --- Pan-Tilt Camera Actuators (2 DOF) ---
+    # The camera is mounted on a 2-axis gimbal allowing it to look around
+    camera_pan_ctrl = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "camera_pan")    # Left/right rotation (radians)
+    camera_tilt_ctrl = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "camera_tilt")  # Up/down rotation (radians)
 
     # ==========================================================================
-    # STEP 4: Initialize robot to home position
+    # STEP 4: Create renderer for image capture
+    # ==========================================================================
+    # The renderer allows us to capture images from any camera defined in the XML
+    renderer = mujoco.Renderer(model, CAPTURE_HEIGHT, CAPTURE_WIDTH)
+
+    # Create output directory for captured images
+    output_dir = script_dir / "captures"
+    output_dir.mkdir(exist_ok=True)
+
+    # ==========================================================================
+    # STEP 5: Initialize robot to home position
     # ==========================================================================
     mujoco.mj_resetData(model, data)
 
     # Set initial joint positions (data.qpos stores all joint positions)
     # Order matches the order joints are defined in the XML
+    # qpos order: base(3) + pan_tilt(2) + right_arm(5) + right_gripper(2) + left_arm(5) + left_gripper(2) = 19
     home_qpos = [
         # Mobile base (3 DOF)
         0, 0, 0,              # x=0m, y=0m, theta=0rad (at origin, facing forward)
-        # Right WX250S arm (6 DOF)
-        0, 0, 0, 0, 0, 0,     # All arm joints at zero (straight up position)
-        # Right gripper fingers (multiple joints for finger segments)
-        0, 0, 0, 0, 0, 0, 0, 0,
-        # Left WX250S arm (6 DOF)
-        0, 0, 0, 0, 0, 0,
-        # Left gripper fingers
-        0, 0, 0, 0, 0, 0, 0, 0
+        # Pan-tilt camera (2 DOF)
+        0, 0,                 # pan=0rad, tilt=0rad (camera facing forward)
+        # Right WX200 arm (5 DOF)
+        0, 0, 0, 0, 0,        # waist, shoulder, elbow, wrist_angle, wrist_rotate
+        # Right gripper fingers (2 DOF)
+        0, 0,                 # left_finger, right_finger (0 = open)
+        # Left WX200 arm (5 DOF)
+        0, 0, 0, 0, 0,        # waist, shoulder, elbow, wrist_angle, wrist_rotate
+        # Left gripper fingers (2 DOF)
+        0, 0                  # left_finger, right_finger (0 = open)
     ]
     data.qpos[:len(home_qpos)] = home_qpos
 
@@ -139,28 +278,32 @@ def main():
     data.ctrl[right_arm_ctrl_waist] = 0.0
     data.ctrl[right_arm_ctrl_shoulder] = 0.0
     data.ctrl[right_arm_ctrl_elbow] = 0.0
-    data.ctrl[right_arm_ctrl_forearm_roll] = 0.0
     data.ctrl[right_arm_ctrl_wrist_angle] = 0.0
     data.ctrl[right_arm_ctrl_wrist_rotate] = 0.0
-    data.ctrl[right_gripper_ctrl] = 0.0  # 0 = fully open
+    data.ctrl[right_gripper_ctrl_left_finger] = 0.0  # 0 = fully open
+    data.ctrl[right_gripper_ctrl_right_finger] = 0.0  # 0 = fully open
 
     # --- Left arm controls (all at zero = home position) ---
     data.ctrl[left_arm_ctrl_waist] = 0.0
     data.ctrl[left_arm_ctrl_shoulder] = 0.0
     data.ctrl[left_arm_ctrl_elbow] = 0.0
-    data.ctrl[left_arm_ctrl_forearm_roll] = 0.0
     data.ctrl[left_arm_ctrl_wrist_angle] = 0.0
     data.ctrl[left_arm_ctrl_wrist_rotate] = 0.0
-    data.ctrl[left_gripper_ctrl] = 0.0  # 0 = fully open
+    data.ctrl[left_gripper_ctrl_left_finger] = 0.0  # 0 = fully open
+    data.ctrl[left_gripper_ctrl_right_finger] = 0.0  # 0 = fully open
+
+    # --- Camera pan-tilt controls (start centered) ---
+    data.ctrl[camera_pan_ctrl] = 0.0   # 0 = looking straight ahead
+    data.ctrl[camera_tilt_ctrl] = 0.0  # 0 = level with horizon
 
     # Compute forward kinematics to update all derived quantities
     mujoco.mj_forward(model, data)
 
     # ==========================================================================
-    # STEP 5: Set up the demo motion with speed-controlled targets
+    # STEP 6: Set up the demo motion with speed-controlled targets
     # ==========================================================================
     print("=" * 60)
-    print("TidyBot2 Bimanual WX250S Arms - Movement Demo")
+    print("TidyBot2 Bimanual WX200 Arms - Movement Demo")
     print("=" * 60)
     print(f"\nSpeed Settings:")
     print(f"  Linear speed:  {BASE_LINEAR_SPEED:.2f} m/s")
@@ -169,6 +312,8 @@ def main():
     print(f"  X: {TARGET_X_POSITION:.2f} m")
     print(f"  Y: {TARGET_Y_POSITION:.2f} m")
     print(f"  Theta: {TARGET_THETA:.2f} rad")
+    print(f"\nCamera capture positions: {len(CAMERA_CAPTURE_POSITIONS)}")
+    print(f"  Images will be saved to: {output_dir}")
     print(f"\nInitial position: x={data.qpos[base_joint_x]:.3f}m, "
           f"y={data.qpos[base_joint_y]:.3f}m, "
           f"theta={data.qpos[base_joint_theta]:.3f}rad")
@@ -183,8 +328,19 @@ def main():
     current_target_y = 0.0      # Current Y target (starts at origin)
     current_target_theta = 0.0  # Current theta target (starts at 0)
 
+    # -------------------------------------------------------------------------
+    # Camera Control Variables
+    # -------------------------------------------------------------------------
+    current_camera_pan = 0.0           # Current pan target (radians)
+    current_camera_tilt = 0.0          # Current tilt target (radians)
+    camera_position_index = 0          # Which capture position we're moving to
+    camera_settled_time = None         # Time when camera reached target position
+    camera_demo_started = False        # Has the camera demo phase begun?
+    camera_demo_complete = False       # Has the camera demo finished?
+    CAMERA_SETTLE_TIME = 0.5           # Seconds to wait before capturing (let servo settle)
+
     # ==========================================================================
-    # STEP 6: Run the simulation with visualization
+    # STEP 7: Run the simulation with visualization
     # ==========================================================================
     # launch_passive creates a viewer that doesn't block - we control the sim loop
     with mujoco.viewer.launch_passive(model, data) as viewer:
@@ -313,6 +469,111 @@ def main():
                 data.ctrl[left_arm_ctrl_wrist_angle] = 0.0
                 arm_demo_complete = True
                 print("Bimanual arm demo complete!")
+
+            # ==================================================================
+            # CONTROL THE PAN-TILT CAMERA
+            # ==================================================================
+            # After the arm demo completes, demonstrate camera control by moving
+            # to each capture position and taking RGB + depth images.
+            #
+            # Camera control works the same as other actuators:
+            #   data.ctrl[camera_pan_ctrl] = target_angle_in_radians
+            #   data.ctrl[camera_tilt_ctrl] = target_angle_in_radians
+
+            if arm_demo_complete and not camera_demo_complete:
+
+                # Start camera demo on first frame after arm demo completes
+                if not camera_demo_started:
+                    camera_demo_started = True
+                    print("\n" + "=" * 60)
+                    print("Starting Camera Pan-Tilt Demo")
+                    print("=" * 60)
+                    target_pan, target_tilt = CAMERA_CAPTURE_POSITIONS[0]
+                    print(f"\nMoving to position 1/{len(CAMERA_CAPTURE_POSITIONS)}: "
+                          f"pan={np.degrees(target_pan):.1f}°, tilt={np.degrees(target_tilt):.1f}°")
+
+                # Get current target position from the list
+                target_pan, target_tilt = CAMERA_CAPTURE_POSITIONS[camera_position_index]
+
+                # -------------------------------------------------------------
+                # Smoothly move pan toward target (speed-limited)
+                # -------------------------------------------------------------
+                if current_camera_pan < target_pan:
+                    current_camera_pan = min(
+                        current_camera_pan + CAMERA_PAN_SPEED * dt,
+                        target_pan
+                    )
+                elif current_camera_pan > target_pan:
+                    current_camera_pan = max(
+                        current_camera_pan - CAMERA_PAN_SPEED * dt,
+                        target_pan
+                    )
+
+                # -------------------------------------------------------------
+                # Smoothly move tilt toward target (speed-limited)
+                # -------------------------------------------------------------
+                if current_camera_tilt < target_tilt:
+                    current_camera_tilt = min(
+                        current_camera_tilt + CAMERA_TILT_SPEED * dt,
+                        target_tilt
+                    )
+                elif current_camera_tilt > target_tilt:
+                    current_camera_tilt = max(
+                        current_camera_tilt - CAMERA_TILT_SPEED * dt,
+                        target_tilt
+                    )
+
+                # -------------------------------------------------------------
+                # Send control commands to camera actuators
+                # -------------------------------------------------------------
+                data.ctrl[camera_pan_ctrl] = current_camera_pan
+                data.ctrl[camera_tilt_ctrl] = current_camera_tilt
+
+                # -------------------------------------------------------------
+                # Check if camera has reached target position
+                # -------------------------------------------------------------
+                pan_at_target = abs(current_camera_pan - target_pan) < 0.01
+                tilt_at_target = abs(current_camera_tilt - target_tilt) < 0.01
+
+                if pan_at_target and tilt_at_target:
+                    # Camera reached target - start settle timer
+                    if camera_settled_time is None:
+                        camera_settled_time = time.time()
+
+                    # Wait for camera to settle before capturing
+                    if time.time() - camera_settled_time > CAMERA_SETTLE_TIME:
+                        # ---------------------------------------------------------
+                        # CAPTURE IMAGES FROM THE REALSENSE D435
+                        # ---------------------------------------------------------
+                        print(f"\n  Capturing images at position {camera_position_index + 1}...")
+
+                        # Capture RGB image
+                        rgb_image = capture_rgb_image(renderer, data, "d435_rgb")
+                        rgb_filename = output_dir / f"rgb_pos{camera_position_index}_pan{target_pan:.2f}_tilt{target_tilt:.2f}.png"
+                        save_image(rgb_image, rgb_filename)
+
+                        # Capture depth image
+                        depth_image = capture_depth_image(renderer, data, "d435_depth")
+                        depth_filename = output_dir / f"depth_pos{camera_position_index}_pan{target_pan:.2f}_tilt{target_tilt:.2f}.png"
+                        save_image(depth_image, depth_filename)
+
+                        # Move to next position
+                        camera_position_index += 1
+                        camera_settled_time = None  # Reset settle timer
+
+                        if camera_position_index >= len(CAMERA_CAPTURE_POSITIONS):
+                            # All positions captured
+                            camera_demo_complete = True
+                            print("\n" + "=" * 60)
+                            print("Camera demo complete!")
+                            print(f"Images saved to: {output_dir}")
+                            print("=" * 60)
+                            print("\nClose the viewer window to exit.")
+                        else:
+                            # Announce next position
+                            next_pan, next_tilt = CAMERA_CAPTURE_POSITIONS[camera_position_index]
+                            print(f"\nMoving to position {camera_position_index + 1}/{len(CAMERA_CAPTURE_POSITIONS)}: "
+                                  f"pan={np.degrees(next_pan):.1f}°, tilt={np.degrees(next_tilt):.1f}°")
 
             # ==================================================================
             # STEP THE SIMULATION

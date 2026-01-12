@@ -42,3 +42,5 @@ Thumbs.db
 
 # MuJoCo
 *.mjb
+
+/simulation/scripts/captures/

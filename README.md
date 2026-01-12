@@ -1,6 +1,6 @@
 # Collaborative Robotics 2026
 
-This repository contains software for controlling the **TidyBot2** mobile robot with **WX250S** 6-DOF arm, developed for Professor Monroe Kennedy's 2026 Collaborative Robotics Class.
+This repository contains software for controlling the **TidyBot2** mobile robot with **WX200** 6-DOF arm, developed for Professor Monroe Kennedy's 2026 Collaborative Robotics Class.
 
 ## Quick Start
 
@@ -27,7 +27,7 @@ source .venv/bin/activate
 
 ```bash
 cd simulation/scripts
-python drive_tidybot_wx250s.py
+python drive_tidybot_wx200.py
 ```
 
 This opens a MuJoCo viewer showing the TidyBot2 driving forward while waving its arm.
@@ -54,11 +54,10 @@ collaborative-robotics-2026/
 
 **TidyBot2** is a mobile manipulation platform consisting of:
 - **Mobile Base**: Kobuki or Create3 base with 3 DOF (x, y, theta)
-- **WX250S Arm**: 6 DOF manipulator (550mm reach, 250g payload)
+- **WX200 Arm**: 5 DOF manipulator (550mm reach, 200g payload)
   - Waist (base rotation): ±175°
   - Shoulder (lift): -108° to 114°
   - Elbow (bend): -123° to 92°
-  - Forearm roll: ±175°
   - Wrist angle: -100° to 123°
   - Wrist rotate: ±175°
 - **Robotiq 2F-85 Gripper**: Adaptive parallel jaw gripper (85mm max opening)
@@ -93,7 +92,7 @@ For course assignments and projects, follow the course guidelines for submission
 - [MuJoCo Documentation](https://mujoco.readthedocs.io/)
 - [uv Documentation](https://docs.astral.sh/uv/)
 - [TidyBot2 Paper](https://arxiv.org/abs/2305.05658)
-- [Interbotix WX250S Specs](https://docs.trossenrobotics.com/interbotix_xsarms_docs/specifications/wx250s.html)
+- [Interbotix WX200 Specs](https://docs.trossenrobotics.com/interbotix_xsarms_docs/specifications/wx200.html)
 
 ## License
 

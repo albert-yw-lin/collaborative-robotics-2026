@@ -73,7 +73,10 @@
   <asset>
     <material name="silver" rgba="0.75294118 0.75294118 0.75294118 1"/>
     <material name="black" rgba="0.30196078 0.30196078 0.30196078 1"/>
-    <mesh file="base/body.stl"/>
+    <!-- Original base mesh (comment out to use new base) -->
+    <!-- <mesh file="base/body.stl"/> -->
+    <!-- New tidybot custom base mesh decimated and recentered) -->
+    <mesh name="body" file="base/new_tidybot.stl" scale="0.001 0.001 0.001"/>
     <mesh file="base/arm_plate.stl"/>
 
     <!-- WX250S arm meshes -->
@@ -98,6 +101,9 @@
     <mesh class="2f85" file="2f85/pad.stl"/>
     <mesh class="2f85" file="2f85/silicone_pad.stl"/>
     <mesh class="2f85" file="2f85/spring_link.stl"/>
+
+    <!-- Intel RealSense D435 -->
+    <mesh name="realsense_d435" file="realsense/RealSense_D435.stl" scale="0.001 0.001 0.001"/>
   </asset>
 
   <worldbody>
@@ -112,6 +118,15 @@
       <geom class="base/collision" mesh="arm_plate"/>
       <camera name="base" pos="0.2525 0 0.335" euler="0 -0.7853981634 -1.5707963268" fovy="52.23384539951277"
         resolution="640 360"/>
+
+      <!-- Intel RealSense D435 Camera - mounted on robot base, looking forward/down at workspace -->
+      <!-- D435 RGB specs: 1920x1080 max, ~69° HFOV, ~42° VFOV -->
+      <!-- Position: front of robot, 40cm height, tilted 30° down -->
+      <body name="realsense_d435" pos="0.25 0 0.40" euler="0 0.5236 0">
+        <geom type="mesh" mesh="realsense_d435" contype="0" conaffinity="0" group="2" rgba="0.15 0.15 0.15 1"/>
+        <camera name="d435_rgb" pos="0 0 0" fovy="42" resolution="640 480"/>
+        <camera name="d435_depth" pos="0 0 0" fovy="57" resolution="640 480"/>
+      </body>
 
       <!-- ==================== RIGHT ARM ==================== -->
       <body name="right_arm_base_link" pos="0.1199 -0.15 0.3948">

@@ -2,62 +2,45 @@
 
 This repository contains software for controlling the **TidyBot2** mobile robot with bimanual **WX200** 6-DOF arms, developed for Professor Monroe Kennedy's 2026 Collaborative Robotics Class.
 
-## Installation (Ubuntu 22.04)
+## Installation
 
-### 1. Install ROS2 Humble
+There are two ways to get started:
 
-```bash
-# Set locale
-sudo apt update && sudo apt install -y locales
-sudo locale-gen en_US en_US.UTF-8
-sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
-export LANG=en_US.UTF-8
+### Option A: Docker (Any OS)
 
-# Add ROS2 repository
-sudo apt install -y software-properties-common curl
-sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
-
-# Install ROS2 Humble
-sudo apt update
-sudo apt install -y ros-humble-desktop
-
-# Install required ROS2 packages
-sudo apt install -y ros-humble-xacro ros-humble-robot-state-publisher \
-    ros-humble-joint-state-publisher ros-humble-rviz2
-
-# Install colcon build tools
-sudo apt install -y python3-colcon-common-extensions
-```
-
-### 2. Install uv (Python Package Manager)
+Use our pre-built Docker image with VNC desktop access. Works on any OS (Windows, macOS, Linux).
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source ~/.bashrc  # or restart your terminal
+# Pull and run the container
+docker run -p 6080:80 --shm-size=2g ghcr.io/armlabstanford/collaborative-robotics-2026:latest
+
+# Access via browser
+# Open http://127.0.0.1:6080/
 ```
 
-### 3. Install System Dependencies
+**Available commands in container:**
+| Command | Description |
+|---------|-------------|
+| `tidybot-sim` | MuJoCo standalone simulation |
+| `tidybot-ros` | ROS2 + RViz + MuJoCo |
+| `tidybot-ros-no-rviz` | ROS2 + MuJoCo (no RViz) |
+| `tidybot-test-base` | Test base movement |
+| `tidybot-test-arms` | Test arm control |
 
-```bash
-sudo apt install -y libgl1-mesa-dev libglfw3-dev libegl1-mesa-dev
-```
+### Option B: Native Ubuntu 22.04
 
-### 4. Clone and Setup
+If you have Ubuntu 22.04 (native install, dual-boot, or VM), use the setup script:
 
 ```bash
 # Clone the repository
 git clone https://github.com/armlabstanford/collaborative-robotics-2026.git
 cd collaborative-robotics-2026
 
-# Install Python dependencies
-uv sync
-
-# Build ROS2 workspace
-cd ros2_ws
-source /opt/ros/humble/setup.bash
-colcon build
+# Run the setup script (installs ROS2, dependencies, and builds workspace)
+./setup.sh --install
 ```
+
+The setup script handles everything: system dependencies, ROS2 Humble, Python environment (`uv sync`), and building the ROS2 workspace (`colcon build`).
 
 ## Quick Start
 

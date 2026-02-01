@@ -157,6 +157,8 @@ struct Gripper
   float horn_radius;
   // Distance [m] from the edge of the motor horn to a finger
   float arm_length;
+  // Angular offset [rad] applied to motor position before conversion (for calibration)
+  float angular_offset;
   // Name of the 'left_finger' joint as defined in the URDF (if present)
   std::string left_finger;
   // Name of the 'right_finger' joint as defined in the URDF (if present)

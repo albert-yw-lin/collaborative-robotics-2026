@@ -90,12 +90,14 @@ def launch_setup(context, *args, **kwargs):
         }]
     ))
 
-    # Joint state aggregator - combines joint states from both arms into /joint_states
+    # Joint state aggregator - combines joint states from arms and pan-tilt into /joint_states
     # This is needed because each xs_sdk publishes to its own namespace
     if use_arms:
         source_list = ['/right_arm/joint_states']
         if use_left_arm:
             source_list.append('/left_arm/joint_states')
+        if use_pan_tilt:
+            source_list.append('/pan_tilt/joint_states')
 
         nodes.append(Node(
             package='joint_state_publisher',
@@ -123,6 +125,15 @@ def launch_setup(context, *args, **kwargs):
                 'max_angular_accel': 0.79,
                 'publish_rate': 50.0,
             }]
+        ))
+    else:
+        # Static transform for odom -> base_link when base is disabled
+        # This allows RViz to display the robot model
+        nodes.append(Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='static_odom_publisher',
+            arguments=['0', '0', '0', '0', '0', '0', 'odom', 'base_link'],
         ))
 
     # Interbotix xs_sdk nodes for arms
@@ -180,21 +191,23 @@ def launch_setup(context, *args, **kwargs):
         nodes.append(Node(
             package='realsense2_camera',
             executable='realsense2_camera_node',
-            name='realsense_camera',
+            name='realsense',
             output='screen',
             parameters=[{
+                'camera_name': 'camera',
+                'camera_namespace': '',
                 'enable_color': True,
                 'enable_depth': True,
-                'color_width': 640,
-                'color_height': 480,
-                'depth_width': 640,
-                'depth_height': 480,
-                'color_fps': 30.0,
-                'depth_fps': 30.0,
+                'enable_infra1': False,
+                'enable_infra2': False,
+                'rgb_camera.color_profile': '640x480x30',
+                'depth_module.depth_profile': '640x480x30',
             }],
             remappings=[
-                ('/camera/color/image_raw', '/camera/color/image_raw'),
-                ('/camera/depth/image_rect_raw', '/camera/depth/image_raw'),
+                ('/camera/realsense/color/image_raw', '/camera/color/image_raw'),
+                ('/camera/realsense/depth/image_rect_raw', '/camera/depth/image_raw'),
+                ('/camera/realsense/color/camera_info', '/camera/color/camera_info'),
+                ('/camera/realsense/depth/camera_info', '/camera/depth/camera_info'),
             ]
         ))
 

@@ -6,14 +6,19 @@ Sequentially tests all hardware components:
 1. Phoenix 6 mobile base (forward/backward, rotation)
 2. Left arm (home, forward, waist rotation, sleep)
 3. Right arm (home, forward, waist rotation, sleep)
-4. Pan-tilt camera system (pan left/right, tilt up/down)
+4. Grippers (via gripper_wrapper_node)
+5. Pan-tilt camera system (pan left/right, tilt up/down)
 
 Usage:
-    # First, launch the full robot:
+    # First, launch the full robot (includes gripper_wrapper_node):
     ros2 launch tidybot_bringup real.launch.py
 
     # Then run this test:
     ros2 run tidybot_bringup test_full_robot.py
+
+Gripper control uses /right_gripper/cmd and /left_gripper/cmd topics
+(Float64MultiArray, 0.0 = open, 1.0 = closed). The gripper_wrapper_node
+translates these to Interbotix SDK commands.
 """
 
 import math
@@ -27,6 +32,7 @@ from nav_msgs.msg import Odometry
 from interbotix_xs_msgs.msg import JointGroupCommand, JointSingleCommand
 from interbotix_xs_msgs.srv import TorqueEnable
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Float64MultiArray
 
 
 # Arm poses (6 joints: waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate)
@@ -80,6 +86,22 @@ class FullRobotTester(Node):
             JointState, '/left_arm/joint_states', self._left_js_cb, 10
         )
 
+        # ===== PAN-TILT (separate topic after xs_sdk modification) =====
+        self.pan_tilt_joint_states = None
+        self.pan_tilt_js_sub = self.create_subscription(
+            JointState, '/pan_tilt/joint_states', self._pan_tilt_js_cb, 10
+        )
+
+        # ===== GRIPPERS (via gripper_wrapper_node) =====
+        # Publishes to /right_gripper/cmd and /left_gripper/cmd
+        # The gripper_wrapper_node translates these to Interbotix SDK commands
+        self.right_gripper_pub = self.create_publisher(
+            Float64MultiArray, '/right_gripper/cmd', 10
+        )
+        self.left_gripper_pub = self.create_publisher(
+            Float64MultiArray, '/left_gripper/cmd', 10
+        )
+
         self.get_logger().info('Full Robot Tester initialized')
 
     def _odom_cb(self, msg):
@@ -90,6 +112,9 @@ class FullRobotTester(Node):
 
     def _left_js_cb(self, msg):
         self.left_joint_states = msg
+
+    def _pan_tilt_js_cb(self, msg):
+        self.pan_tilt_joint_states = msg
 
     def spin_for(self, duration):
         """Spin for a duration while processing callbacks."""
@@ -103,6 +128,7 @@ class FullRobotTester(Node):
         has_base = False
         has_right_arm = False
         has_left_arm = False
+        has_pan_tilt = False
 
         while (time.time() - start) < timeout:
             rclpy.spin_once(self, timeout_sec=0.1)
@@ -113,12 +139,14 @@ class FullRobotTester(Node):
                 has_right_arm = True
             if self.left_joint_states is not None:
                 has_left_arm = True
+            if self.pan_tilt_joint_states is not None:
+                has_pan_tilt = True
 
             # Return early if we have all components
-            if has_base and has_right_arm and has_left_arm:
+            if has_base and has_right_arm and has_left_arm and has_pan_tilt:
                 break
 
-        return has_base, has_right_arm, has_left_arm
+        return has_base, has_right_arm, has_left_arm, has_pan_tilt
 
     # ===== BASE CONTROL =====
     def move_base(self, linear_x, angular_z, duration):
@@ -220,8 +248,8 @@ class FullRobotTester(Node):
             waist_joint = 'right_waist'
         else:
             namespace = 'left_arm'
-            group_name = 'arm'
-            waist_joint = 'waist'
+            group_name = 'left_arm'
+            waist_joint = 'left_waist'
 
         print()
         print("=" * 50)
@@ -249,6 +277,51 @@ class FullRobotTester(Node):
         self.move_arm_group(namespace, group_name, SLEEP_POSE, move_time=2.5)
 
         print(f"{side.upper()} arm test complete!")
+
+    # ===== GRIPPER CONTROL =====
+    def set_grippers(self, position, duration=2.0):
+        """
+        Set both grippers to a position using wrapper node.
+
+        Args:
+            position: 0.0 (open) to 1.0 (closed)
+            duration: Time to hold the command (seconds)
+        """
+        msg = Float64MultiArray()
+        msg.data = [float(position)]
+
+        # Publish for duration (reduced rate to avoid bus overload)
+        start = time.time()
+        while (time.time() - start) < duration:
+            self.right_gripper_pub.publish(msg)
+            self.left_gripper_pub.publish(msg)
+            rclpy.spin_once(self, timeout_sec=0.02)
+            time.sleep(0.1)  # 10Hz instead of 20Hz
+
+        # Send stop command (0.5 maps to PWM=0 in wrapper)
+        stop_msg = Float64MultiArray()
+        stop_msg.data = [0.5]
+        self.right_gripper_pub.publish(stop_msg)
+        self.left_gripper_pub.publish(stop_msg)
+        rclpy.spin_once(self, timeout_sec=0.05)
+
+    def test_grippers(self):
+        """Test both grippers using gripper_wrapper_node interface."""
+        print()
+        print("=" * 50)
+        print("TESTING: Grippers (via gripper_wrapper_node)")
+        print("=" * 50)
+
+        print("[1/3] Opening both grippers...")
+        self.set_grippers(0.0, duration=2.0)
+
+        print("[2/3] Closing both grippers...")
+        self.set_grippers(1.0, duration=2.0)
+
+        print("[3/3] Opening both grippers again...")
+        self.set_grippers(0.0, duration=2.0)
+
+        print("Gripper test complete!")
 
     # ===== PAN-TILT CONTROL =====
     def test_pan_tilt(self):
@@ -295,7 +368,8 @@ def main():
     print("  1. Phoenix 6 mobile base")
     print("  2. Left arm (Interbotix WX250s)")
     print("  3. Right arm (Interbotix WX250s)")
-    print("  4. Pan-tilt camera system")
+    print("  4. Grippers (both arms)")
+    print("  5. Pan-tilt camera system")
     print()
 
     rclpy.init()
@@ -304,12 +378,7 @@ def main():
     try:
         # Wait for components
         print("Detecting hardware components...")
-        has_base, has_right_arm, has_left_arm = node.wait_for_components(timeout=10.0)
-
-        # Check pan-tilt availability (part of right arm)
-        has_pan_tilt = False
-        if has_right_arm and node.right_joint_states:
-            has_pan_tilt = 'pan' in node.right_joint_states.name
+        has_base, has_right_arm, has_left_arm, has_pan_tilt = node.wait_for_components(timeout=10.0)
 
         print()
         print("Detected components:")
@@ -364,7 +433,18 @@ def main():
         else:
             print("\nSkipping right arm test (not detected)")
 
-        # 4. Test pan-tilt
+        # 4. Test grippers (using GripperController with SDK mode)
+        if has_left_arm or has_right_arm:
+            tests_total += 1
+            try:
+                node.test_grippers()
+                tests_passed += 1
+            except Exception as e:
+                print(f"Gripper test failed: {e}")
+        else:
+            print("\nSkipping gripper test (no arms detected)")
+
+        # 5. Test pan-tilt
         if has_pan_tilt:
             tests_total += 1
             try:

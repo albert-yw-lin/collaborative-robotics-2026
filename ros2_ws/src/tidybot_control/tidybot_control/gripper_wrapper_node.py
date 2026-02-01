@@ -10,6 +10,11 @@ To Interbotix SDK:
     /right_arm/commands/joint_single (JointSingleCommand, PWM effort)
     /left_arm/commands/joint_single (JointSingleCommand, PWM effort)
 
+PWM Control (from Interbotix SDK):
+    - Positive PWM = open (release)
+    - Negative PWM = close (grasp)
+    - Pressure range: 150 (gentle) to 350 (strong)
+
 This allows the same user code to work for both simulation and real hardware.
 """
 
@@ -22,13 +27,21 @@ from interbotix_xs_msgs.msg import JointSingleCommand
 class GripperWrapperNode(Node):
     """Wrapper node to translate sim gripper commands to Interbotix SDK."""
 
-    # PWM effort values for gripper control
-    # These are tuned for WX250s grippers in PWM mode
-    GRIPPER_PWM_OPEN = -200.0   # Negative = open
-    GRIPPER_PWM_CLOSE = 250.0   # Positive = close
+    # PWM pressure limits (from Interbotix SDK)
+    GRIPPER_PRESSURE_LOWER = 150   # Minimum PWM for movement
+    GRIPPER_PRESSURE_UPPER = 350   # Maximum PWM (avoid motor overload)
 
     def __init__(self):
         super().__init__('gripper_wrapper')
+
+        # Declare pressure parameter (0.0 to 1.0)
+        self.declare_parameter('pressure', 1.0)
+        self.pressure = self.get_parameter('pressure').value
+
+        # Calculate PWM from pressure
+        self.pwm_value = self.GRIPPER_PRESSURE_LOWER + self.pressure * (
+            self.GRIPPER_PRESSURE_UPPER - self.GRIPPER_PRESSURE_LOWER
+        )
 
         # Publishers to Interbotix SDK
         self.right_gripper_pub = self.create_publisher(
@@ -49,8 +62,10 @@ class GripperWrapperNode(Node):
         )
 
         self.get_logger().info('Gripper wrapper node started')
+        self.get_logger().info(f'  Pressure: {self.pressure * 100:.0f}% (PWM: {self.pwm_value:.0f})')
         self.get_logger().info('  Listening on /right_gripper/cmd and /left_gripper/cmd')
         self.get_logger().info('  Publishing to Interbotix SDK joint_single topics')
+        self.get_logger().info('  Command: 0.0 = open, 1.0 = closed')
 
     def _gripper_callback(self, msg: Float64MultiArray, side: str):
         """
@@ -66,25 +81,21 @@ class GripperWrapperNode(Node):
         # Normalize input to 0-1 range
         normalized = max(0.0, min(1.0, msg.data[0]))
 
-        # Convert to PWM effort: 0 (open) -> negative PWM, 1 (closed) -> positive PWM
-        # Linear interpolation between open and close PWM values
-        pwm = self.GRIPPER_PWM_OPEN + normalized * (self.GRIPPER_PWM_CLOSE - self.GRIPPER_PWM_OPEN)
+        # Convert to PWM effort:
+        # 0.0 (open)   -> +pwm_value (positive = open/release)
+        # 1.0 (closed) -> -pwm_value (negative = close/grasp)
+        # Linear interpolation between open and close
+        pwm = self.pwm_value - normalized * (2 * self.pwm_value)
 
         # Create Interbotix command
         cmd = JointSingleCommand()
+        cmd.cmd = float(pwm)
+
         if side == 'right':
             cmd.name = 'right_gripper'
             self.right_gripper_pub.publish(cmd)
         else:
-            cmd.name = 'gripper'  # Left arm gripper is named 'gripper' in config
-            self.left_gripper_pub.publish(cmd)
-
-        cmd.cmd = float(pwm)
-
-        # Publish to Interbotix SDK
-        if side == 'right':
-            self.right_gripper_pub.publish(cmd)
-        else:
+            cmd.name = 'left_gripper'
             self.left_gripper_pub.publish(cmd)
 
 

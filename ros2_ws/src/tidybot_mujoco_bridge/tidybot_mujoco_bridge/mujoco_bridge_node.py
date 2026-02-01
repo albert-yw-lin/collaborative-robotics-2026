@@ -199,12 +199,12 @@ class MuJoCoBridgeNode(Node):
         # Target positions for all actuators (initialized from data.ctrl which may have keyframe values)
         self.target_ctrl = self.data.ctrl.copy()
 
-        # Ensure gripper positions are valid (minimum -0.014)
+        # Ensure gripper positions are valid (minimum 0.015)
         for name in ['right_left_finger', 'right_right_finger', 'left_left_finger', 'left_right_finger']:
             if name in self.actuator_ids:
                 idx = self.actuator_ids[name]
-                if self.target_ctrl[idx] < -0.014:
-                    self.target_ctrl[idx] = -0.014
+                if self.target_ctrl[idx] < 0.015:
+                    self.target_ctrl[idx] = 0.015
 
         # QoS profile - use RELIABLE for RViz compatibility
         qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
@@ -327,9 +327,9 @@ class MuJoCoBridgeNode(Node):
         if len(msg.data) < 1:
             return
         # Convert normalized position to finger position
-        # 0.0 = open (0.022m), 1.0 = closed (-0.014m)
-        # Maps [0,1] to [0.022, -0.014] (range of 0.036m)
-        pos = 0.022 - msg.data[0] * 0.036
+        # 0.0 = open (0.037m), 1.0 = closed (0.015m)
+        # Maps [0,1] to [0.037, 0.015] (range of 0.022m)
+        pos = 0.037 - msg.data[0] * 0.022
         with self.lock:
             if 'right_left_finger' in self.actuator_ids:
                 idx = self.actuator_ids['right_left_finger']
@@ -344,8 +344,8 @@ class MuJoCoBridgeNode(Node):
         if len(msg.data) < 1:
             return
         # Convert normalized position to finger position
-        # 0.0 = open (0.022m), 1.0 = closed (-0.014m)
-        pos = 0.022 - msg.data[0] * 0.036
+        # 0.0 = open (0.037m), 1.0 = closed (0.015m)
+        pos = 0.037 - msg.data[0] * 0.022
         with self.lock:
             if 'left_left_finger' in self.actuator_ids:
                 self.target_ctrl[self.actuator_ids['left_left_finger']] = pos

@@ -26,6 +26,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <set>
 #include <string>
 #include <vector>
 #include <memory>
@@ -86,12 +87,29 @@ void InterbotixRobotXS::robot_init_parameters()
   timer_hz = pub_configs["update_rate"].as<int>(100);
   pub_states = pub_configs["publish_states"].as<bool>(true);
   js_topic = pub_configs["topic_name"].as<std::string>("joint_states");
+
+  // Load group-specific joint state publisher config (optional)
+  YAML::Node group_pub_configs = YAML::LoadFile(filepath_motor_configs)["group_joint_state_publishers"];
+  if (group_pub_configs) {
+    for (auto it = group_pub_configs.begin(); it != group_pub_configs.end(); ++it) {
+      std::string group_name = it->first.as<std::string>();
+      std::string topic_name = it->second.as<std::string>();
+      group_js_topics[group_name] = topic_name;
+      RCLCPP_INFO(LOGGER, "Will publish '%s' group joint states to '%s'", group_name.c_str(), topic_name.c_str());
+    }
+  }
 }
 
 void InterbotixRobotXS::robot_init_publishers()
 {
   if (pub_states) {
     pub_joint_states = this->create_publisher<sensor_msgs::msg::JointState>(js_topic, 10);
+
+    // Create group-specific joint state publishers
+    for (const auto & [group_name, topic_name] : group_js_topics) {
+      pub_group_joint_states[group_name] = this->create_publisher<sensor_msgs::msg::JointState>(topic_name, 10);
+      RCLCPP_INFO(LOGGER, "Created group joint state publisher: %s -> %s", group_name.c_str(), topic_name.c_str());
+    }
   }
 }
 
@@ -509,7 +527,7 @@ void InterbotixRobotXS::robot_update_joint_states()
     float pos = xs_driver->convert_angular_position_to_linear(
       name, joint_state_msg.position.at(xs_driver->get_gripper_info(name)->js_index));
     joint_state_msg.position.push_back(pos);
-    joint_state_msg.position.push_back(-pos);
+    joint_state_msg.position.push_back(pos);  // Same value for both fingers - URDF handles opposite axes
     joint_state_msg.velocity.push_back(0);
     joint_state_msg.velocity.push_back(0);
     joint_state_msg.effort.push_back(0);
@@ -520,7 +538,67 @@ void InterbotixRobotXS::robot_update_joint_states()
   joint_state_msg.header.stamp = this->get_clock()->now();
   joint_states = joint_state_msg;
   if (pub_states) {
-    pub_joint_states->publish(joint_state_msg);
+    // Build set of joints that have dedicated group publishers (to exclude from main topic)
+    std::set<std::string> excluded_joints;
+    for (const auto & [group_name, publisher] : pub_group_joint_states) {
+      auto group_info = xs_driver->get_group_info(group_name);
+      if (group_info) {
+        for (const auto & joint_name : group_info->joint_names) {
+          excluded_joints.insert(joint_name);
+        }
+      }
+    }
+
+    // Create filtered message for main topic (excluding joints with dedicated publishers)
+    sensor_msgs::msg::JointState filtered_js_msg;
+    filtered_js_msg.header = joint_state_msg.header;
+    for (size_t i = 0; i < joint_state_msg.name.size(); i++) {
+      if (excluded_joints.find(joint_state_msg.name[i]) == excluded_joints.end()) {
+        filtered_js_msg.name.push_back(joint_state_msg.name[i]);
+        if (i < joint_state_msg.position.size()) {
+          filtered_js_msg.position.push_back(joint_state_msg.position[i]);
+        }
+        if (i < joint_state_msg.velocity.size()) {
+          filtered_js_msg.velocity.push_back(joint_state_msg.velocity[i]);
+        }
+        if (i < joint_state_msg.effort.size()) {
+          filtered_js_msg.effort.push_back(joint_state_msg.effort[i]);
+        }
+      }
+    }
+    pub_joint_states->publish(filtered_js_msg);
+
+    // Publish group-specific joint states
+    for (const auto & [group_name, publisher] : pub_group_joint_states) {
+      sensor_msgs::msg::JointState group_js_msg;
+      group_js_msg.header.stamp = joint_state_msg.header.stamp;
+
+      // Get the joint names for this group
+      auto group_info = xs_driver->get_group_info(group_name);
+      if (!group_info) continue;
+
+      for (const auto & joint_name : group_info->joint_names) {
+        // Find this joint in the full joint state message
+        auto it = std::find(joint_state_msg.name.begin(), joint_state_msg.name.end(), joint_name);
+        if (it != joint_state_msg.name.end()) {
+          size_t idx = std::distance(joint_state_msg.name.begin(), it);
+          group_js_msg.name.push_back(joint_name);
+          if (idx < joint_state_msg.position.size()) {
+            group_js_msg.position.push_back(joint_state_msg.position[idx]);
+          }
+          if (idx < joint_state_msg.velocity.size()) {
+            group_js_msg.velocity.push_back(joint_state_msg.velocity[idx]);
+          }
+          if (idx < joint_state_msg.effort.size()) {
+            group_js_msg.effort.push_back(joint_state_msg.effort[idx]);
+          }
+        }
+      }
+
+      if (!group_js_msg.name.empty()) {
+        publisher->publish(group_js_msg);
+      }
+    }
   }
 }
 

@@ -1,38 +1,40 @@
 # TidyBot2 Right Arm Motor Configuration (WX250s)
-# Based on Interbotix wx250s.yaml with port adjusted for TidyBot2
+# Right arm: Motor IDs 1-9 on /dev/ttyUSB0
+# Joint names match simulation: right_waist, right_shoulder, etc.
 
-port: /dev/ttyUSB0
+port: /dev/ttyUSB_RIGHT
 
-joint_order: [waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate, right_gripper]
+joint_order: [right_waist, right_shoulder, right_elbow, right_forearm_roll, right_wrist_angle, right_wrist_rotate, right_gripper]
 sleep_positions: [0, -1.80, 1.55, 0, 0.8, 0, 0]
 
 joint_state_publisher:
-  update_rate: 100
+  update_rate: 50
   publish_states: true
   topic_name: joint_states
 
 groups:
-  right_arm: [waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate]
+  right_arm: [right_waist, right_shoulder, right_elbow, right_forearm_roll, right_wrist_angle, right_wrist_rotate]
 
 grippers:
   right_gripper:
     horn_radius: 0.014
     arm_length: 0.024
+    angular_offset: -1.0  # Offset to match left gripper behavior (right motor range is closer to ±π/2)
     left_finger: right_left_finger
     right_finger: right_right_finger
 
 shadows:
-  shoulder:
-    shadow_list: [shoulder_shadow]
+  right_shoulder:
+    shadow_list: [right_shoulder_shadow]
     calibrate: true
-  elbow:
-    shadow_list: [elbow_shadow]
+  right_elbow:
+    shadow_list: [right_elbow_shadow]
     calibrate: true
 
 sisters:
 
 motors:
-  waist:
+  right_waist:
     ID: 1
     Baud_Rate: 3
     Return_Delay_Time: 0
@@ -42,7 +44,7 @@ motors:
     Max_Position_Limit: 4095
     Secondary_ID: 255
 
-  shoulder:
+  right_shoulder:
     ID: 2
     Baud_Rate: 3
     Return_Delay_Time: 0
@@ -52,7 +54,7 @@ motors:
     Max_Position_Limit: 3345
     Secondary_ID: 255
 
-  shoulder_shadow:
+  right_shoulder_shadow:
     ID: 3
     Baud_Rate: 3
     Return_Delay_Time: 0
@@ -62,7 +64,7 @@ motors:
     Max_Position_Limit: 3345
     Secondary_ID: 2
 
-  elbow:
+  right_elbow:
     ID: 4
     Baud_Rate: 3
     Return_Delay_Time: 0
@@ -72,7 +74,7 @@ motors:
     Max_Position_Limit: 3094
     Secondary_ID: 255
 
-  elbow_shadow:
+  right_elbow_shadow:
     ID: 5
     Baud_Rate: 3
     Return_Delay_Time: 0
@@ -82,7 +84,7 @@ motors:
     Max_Position_Limit: 3094
     Secondary_ID: 4
 
-  forearm_roll:
+  right_forearm_roll:
     ID: 6
     Baud_Rate: 3
     Return_Delay_Time: 0
@@ -92,7 +94,7 @@ motors:
     Max_Position_Limit: 4095
     Secondary_ID: 255
 
-  wrist_angle:
+  right_wrist_angle:
     ID: 7
     Baud_Rate: 3
     Return_Delay_Time: 0
@@ -102,7 +104,7 @@ motors:
     Max_Position_Limit: 3447
     Secondary_ID: 255
 
-  wrist_rotate:
+  right_wrist_rotate:
     ID: 8
     Baud_Rate: 3
     Return_Delay_Time: 0

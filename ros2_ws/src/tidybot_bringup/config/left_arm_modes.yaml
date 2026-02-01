@@ -1,7 +1,7 @@
 # TidyBot2 Left Arm Operating Modes
 
 groups:
-  arm:
+  left_arm:
     operating_mode: position
     profile_type: velocity
     profile_velocity: 131
@@ -9,6 +9,6 @@ groups:
     torque_enable: true
 
 singles:
-  gripper:
+  left_gripper:
     operating_mode: pwm
     torque_enable: true

@@ -101,6 +101,9 @@ private:
   // ROS Publisher responsible for publishing joint states
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pub_joint_states;
 
+  // ROS Publishers for group-specific joint states (e.g., pan_tilt -> /pan_tilt/joint_states)
+  std::unordered_map<std::string, rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr> pub_group_joint_states;
+
   // ROS Subscriber responsible for subscribing to JointGroupCommand messages
   rclcpp::Subscription<JointGroupCommand>::SharedPtr sub_command_group;
 
@@ -151,6 +154,9 @@ private:
 
   // Desired JointState topic name
   std::string js_topic;
+
+  // Mapping of group names to their dedicated joint state topic names
+  std::unordered_map<std::string, std::string> group_js_topics;
 
   // Absolute path to the motor configs file
   std::string filepath_motor_configs;

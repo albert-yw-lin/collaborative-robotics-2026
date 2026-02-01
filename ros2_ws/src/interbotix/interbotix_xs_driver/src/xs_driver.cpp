@@ -766,7 +766,9 @@ float InterbotixDriverXS::convert_angular_position_to_linear(
 {
   float arm_length = gripper_map[name].arm_length;
   float horn_radius = gripper_map[name].horn_radius;
-  float a1 = horn_radius * sin(angular_position);
+  float angular_offset = gripper_map[name].angular_offset;
+  float adjusted_angle = angular_position + angular_offset;
+  float a1 = horn_radius * sin(adjusted_angle);
   float c = sqrt(pow(horn_radius, 2) - pow(a1, 2));
   float a2 = sqrt(pow(arm_length, 2) - pow(c, 2));
   return a1 + a2;
@@ -872,6 +874,7 @@ bool InterbotixDriverXS::retrieve_motor_configs(
     //  values if not given the value
     gripper.horn_radius = single_gripper["horn_radius"].as<float>(0.014);
     gripper.arm_length = single_gripper["arm_length"].as<float>(0.024);
+    gripper.angular_offset = single_gripper["angular_offset"].as<float>(0.0);
     gripper.left_finger = single_gripper["left_finger"].as<std::string>("left_finger");
     gripper.right_finger = single_gripper["right_finger"].as<std::string>("right_finger");
     gripper_map.insert({gripper_name, gripper});

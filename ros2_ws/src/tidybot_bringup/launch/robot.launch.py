@@ -202,22 +202,24 @@ def generate_launch_description():
     realsense_camera = Node(
         package='realsense2_camera',
         executable='realsense2_camera_node',
-        name='realsense_camera',
+        name='realsense',
         output='screen',
         condition=IfCondition(LaunchConfiguration('use_camera')),
         parameters=[{
+            'camera_name': 'camera',
+            'camera_namespace': '',
             'enable_color': True,
             'enable_depth': True,
-            'color_width': 640,
-            'color_height': 480,
-            'depth_width': 640,
-            'depth_height': 480,
-            'color_fps': 30.0,
-            'depth_fps': 30.0,
+            'enable_infra1': False,
+            'enable_infra2': False,
+            'rgb_camera.color_profile': '640x480x30',
+            'depth_module.depth_profile': '640x480x30',
         }],
         remappings=[
-            ('/camera/color/image_raw', '/camera/color/image_raw'),
-            ('/camera/depth/image_rect_raw', '/camera/depth/image_raw'),
+            ('/camera/realsense/color/image_raw', '/camera/color/image_raw'),
+            ('/camera/realsense/depth/image_rect_raw', '/camera/depth/image_raw'),
+            ('/camera/realsense/color/camera_info', '/camera/color/camera_info'),
+            ('/camera/realsense/depth/camera_info', '/camera/depth/camera_info'),
         ]
     )
 

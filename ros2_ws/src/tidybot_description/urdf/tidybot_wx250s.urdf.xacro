@@ -349,9 +349,9 @@
     <joint name="${prefix}_left_finger" type="prismatic">
       <parent link="${prefix}_fingers_link"/>
       <child link="${prefix}_left_finger_link"/>
-      <origin xyz="0 0.015 0" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <axis xyz="0 1 0"/>
-      <limit lower="-0.014" upper="0.022" effort="5" velocity="1"/>
+      <limit lower="0.015" upper="0.037" effort="5" velocity="1"/>
       <dynamics damping="0.1"/>
     </joint>
 
@@ -373,9 +373,9 @@
     <joint name="${prefix}_right_finger" type="prismatic">
       <parent link="${prefix}_fingers_link"/>
       <child link="${prefix}_right_finger_link"/>
-      <origin xyz="0 -0.015 0" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <axis xyz="0 -1 0"/>
-      <limit lower="-0.014" upper="0.022" effort="5" velocity="1"/>
+      <limit lower="0.015" upper="0.037" effort="5" velocity="1"/>
       <dynamics damping="0.1"/>
     </joint>
 

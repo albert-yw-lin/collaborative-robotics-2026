@@ -196,12 +196,14 @@ def launch_setup(context, *args, **kwargs):
             parameters=[{
                 'camera_name': 'camera',
                 'camera_namespace': '',
+                'base_frame_id': 'link',
                 'enable_color': True,
                 'enable_depth': True,
                 'enable_infra1': False,
                 'enable_infra2': False,
-                'rgb_camera.color_profile': '640x480x30',
-                'depth_module.depth_profile': '640x480x30',
+                'publish_tf': False,
+                'rgb_camera.color_profile': '640x480x15',
+                'depth_module.depth_profile': '640x480x15',
             }],
             remappings=[
                 ('/camera/realsense/color/image_raw', '/camera/color/image_raw'),

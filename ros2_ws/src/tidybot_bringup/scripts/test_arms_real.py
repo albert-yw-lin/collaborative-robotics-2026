@@ -298,11 +298,18 @@ class RobotTester(Node):
         print("Testing GRIPPERS (via gripper_wrapper_node)...")
         print("-" * 40)
 
+        # Allow bus to settle after pan-tilt commands
+        print("Waiting for bus to settle...")
+        time.sleep(1.0)
+
         print("[1/4] Opening RIGHT gripper...")
         self.set_gripper('right', 0.0, duration=2.0)
 
         print("[2/4] Closing RIGHT gripper...")
         self.set_gripper('right', 1.0, duration=2.0)
+
+        # Small delay before switching to left arm U2D2
+        time.sleep(0.5)
 
         print("[3/4] Opening LEFT gripper...")
         self.set_gripper('left', 0.0, duration=2.0)

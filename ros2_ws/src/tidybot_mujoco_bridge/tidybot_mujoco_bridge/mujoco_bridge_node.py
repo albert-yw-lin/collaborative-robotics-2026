@@ -633,7 +633,7 @@ class MuJoCoBridgeNode(Node):
         try:
             rgb_msg = self.cv_bridge.cv2_to_imgmsg(rgb_image, encoding='rgb8')
             rgb_msg.header.stamp = now
-            rgb_msg.header.frame_id = 'd435_color_optical_frame'
+            rgb_msg.header.frame_id = 'camera_color_optical_frame'
             self.rgb_pub.publish(rgb_msg)
         except Exception as e:
             self.get_logger().warn(f'Failed to publish RGB image: {e}')
@@ -644,7 +644,7 @@ class MuJoCoBridgeNode(Node):
             depth_mm = (depth_image * 1000).astype(np.uint16)
             depth_msg = self.cv_bridge.cv2_to_imgmsg(depth_mm, encoding='16UC1')
             depth_msg.header.stamp = now
-            depth_msg.header.frame_id = 'd435_depth_optical_frame'
+            depth_msg.header.frame_id = 'camera_depth_optical_frame'
             self.depth_pub.publish(depth_msg)
         except Exception as e:
             self.get_logger().warn(f'Failed to publish depth image: {e}')
@@ -652,7 +652,7 @@ class MuJoCoBridgeNode(Node):
         # Publish camera info
         camera_info = CameraInfo()
         camera_info.header.stamp = now
-        camera_info.header.frame_id = 'd435_color_optical_frame'
+        camera_info.header.frame_id = 'camera_color_optical_frame'
         camera_info.width = 640
         camera_info.height = 480
         # Approximate D435 intrinsics (fovy=42 degrees)

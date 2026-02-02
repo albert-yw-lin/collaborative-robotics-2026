@@ -126,17 +126,18 @@
   </joint>
 
   <!-- Camera optical frames (Z forward, X right, Y down - standard ROS convention) -->
-  <link name="d435_color_optical_frame"/>
+  <!-- These frames are published by RealSense driver on real robot, but needed in URDF for simulation -->
+  <link name="camera_color_optical_frame"/>
   <joint name="camera_to_color_optical" type="fixed">
     <parent link="camera_link"/>
-    <child link="d435_color_optical_frame"/>
+    <child link="camera_color_optical_frame"/>
     <origin xyz="0 0 0" rpy="-1.5708 0 -1.5708"/>
   </joint>
 
-  <link name="d435_depth_optical_frame"/>
+  <link name="camera_depth_optical_frame"/>
   <joint name="camera_to_depth_optical" type="fixed">
     <parent link="camera_link"/>
-    <child link="d435_depth_optical_frame"/>
+    <child link="camera_depth_optical_frame"/>
     <origin xyz="0 0 0" rpy="-1.5708 0 -1.5708"/>
   </joint>
 

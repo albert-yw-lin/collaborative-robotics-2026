@@ -34,6 +34,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import Pose
+from visualization_msgs.msg import Marker
 
 from interbotix_xs_msgs.msg import JointGroupCommand
 from tidybot_msgs.srv import PlanToTarget
@@ -80,6 +81,10 @@ class MotionPlannerRealNode(Node):
         self.declare_parameter('min_collision_distance', 0.05)  # 5cm
         self.declare_parameter('ik_damping', 1e-5)  # Less damping for better convergence
         self.declare_parameter('max_ik_seeds', 7)  # Max number of IK seeds to try
+        # Workspace bounding box (min and max) in robot base frame
+        self.declare_parameter('workspace_min', [0.2, -0.5, 0.0])
+        self.declare_parameter('workspace_max', [0.8, 0.5, 0.6])
+        self.declare_parameter('workspace_frame', 'base_link')
 
         # Get parameters
         urdf_path_param = self.get_parameter('urdf_path').get_parameter_value().string_value
@@ -90,6 +95,13 @@ class MotionPlannerRealNode(Node):
         self.min_collision_distance = self.get_parameter('min_collision_distance').get_parameter_value().double_value
         self.ik_damping = self.get_parameter('ik_damping').get_parameter_value().double_value
         self.max_ik_seeds = self.get_parameter('max_ik_seeds').get_parameter_value().integer_value
+
+        # Workspace parameters
+        workspace_min_param = self.get_parameter('workspace_min').get_parameter_value().double_array_value
+        workspace_max_param = self.get_parameter('workspace_max').get_parameter_value().double_array_value
+        self.workspace_min = np.array(workspace_min_param)
+        self.workspace_max = np.array(workspace_max_param)
+        self.workspace_frame = self.get_parameter('workspace_frame').get_parameter_value().string_value
 
         # Find URDF path
         if urdf_path_param:
@@ -173,6 +185,12 @@ class MotionPlannerRealNode(Node):
             'right': self.create_publisher(JointGroupCommand, '/right_arm/commands/joint_group', 10),
             'left': self.create_publisher(JointGroupCommand, '/left_arm/commands/joint_group', 10),
         }
+
+        # RViz Marker publisher for workspace visualization
+        self.workspace_marker_pub = self.create_publisher(Marker, 'workspace_marker', 10)
+
+        # Safety timer: check current FK and publish workspace marker
+        self.create_timer(0.5, self.safety_timer_callback)
 
         # Subscribers for joint states (both aggregated and per-arm)
         self.create_subscription(JointState, '/joint_states', self.joint_state_callback, 10)
@@ -301,6 +319,11 @@ class MotionPlannerRealNode(Node):
         )
 
         return pin.SE3(quat.matrix(), position)
+
+    def is_in_workspace(self, position: np.ndarray) -> bool:
+        """Return True if a 3D position is inside the workspace bounding box."""
+        pos = np.asarray(position)
+        return bool(np.all(pos >= self.workspace_min) and np.all(pos <= self.workspace_max))
 
     def solve_ik(self, arm_name: str, target_pose: pin.SE3,
                  use_orientation: bool, seed: np.ndarray) -> tuple:
@@ -491,6 +514,13 @@ class MotionPlannerRealNode(Node):
         # Convert target pose to SE3
         target_se3 = self.pose_to_se3(request.target_pose)
 
+        # Workspace check: abort early if target is out of bounds
+        if not self.is_in_workspace(target_se3.translation):
+            response.success = False
+            response.message = 'Target out of workspace'
+            self.get_logger().warn(response.message)
+            return response
+
         # Build seed list: current position first, then extra seeds.
         # For the left arm, mirror the waist and forearm_roll signs.
         seeds = [primary_seed]
@@ -618,6 +648,74 @@ class MotionPlannerRealNode(Node):
             # Wait for next step (except on last iteration)
             if i < num_steps:
                 time.sleep(dt)
+
+    def publish_workspace_marker(self):
+        """Publish a transparent cube marker representing the workspace bounding box."""
+        marker = Marker()
+        marker.header.frame_id = self.workspace_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = 'workspace'
+        marker.id = 0
+        marker.type = Marker.CUBE
+        marker.action = Marker.ADD
+
+        center = (self.workspace_min + self.workspace_max) / 2.0
+        size = (self.workspace_max - self.workspace_min)
+
+        marker.pose.position.x = float(center[0])
+        marker.pose.position.y = float(center[1])
+        marker.pose.position.z = float(center[2])
+        # Neutral orientation
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = 0.0
+        marker.pose.orientation.w = 1.0
+
+        marker.scale.x = float(size[0])
+        marker.scale.y = float(size[1])
+        marker.scale.z = float(size[2])
+
+        marker.color.r = 0.0
+        marker.color.g = 1.0
+        marker.color.b = 0.0
+        marker.color.a = 0.3
+
+        self.workspace_marker_pub.publish(marker)
+
+    def safety_timer_callback(self):
+        """Timer callback: check FK of both arms and warn if EE leaves workspace; publish marker."""
+        # Check both arms' end-effector positions
+        for arm in ['right', 'left']:
+            ee_frame_id = self.ee_frame_ids.get(arm)
+            if ee_frame_id is None:
+                continue
+
+            # Build configuration vector
+            q = pin.neutral(self.model)
+            # Set this arm joints
+            arm_pos = self.get_arm_joint_positions(arm, use_default_if_zero=False)
+            self.set_arm_configuration(q, arm, arm_pos)
+            # Set other arm to current positions as well
+            other_arm = 'left' if arm == 'right' else 'right'
+            other_pos = self.get_arm_joint_positions(other_arm, use_default_if_zero=False)
+            self.set_arm_configuration(q, other_arm, other_pos)
+
+            # FK
+            try:
+                pin.forwardKinematics(self.model, self.data, q)
+                pin.updateFramePlacements(self.model, self.data)
+            except Exception:
+                continue
+
+            ee_pos = self.data.oMf[ee_frame_id].translation.copy()
+            if not self.is_in_workspace(ee_pos):
+                self.get_logger().warn(f'{arm.capitalize()} end-effector out of workspace: {ee_pos}')
+
+        # Publish the workspace marker for RViz
+        try:
+            self.publish_workspace_marker()
+        except Exception as e:
+            self.get_logger().error(f'Failed to publish workspace marker: {e}')
 
 
 def main(args=None):

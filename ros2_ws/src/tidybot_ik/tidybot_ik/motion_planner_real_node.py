@@ -27,6 +27,7 @@ from threading import Lock
 import subprocess
 import tempfile
 import os
+from ament_index_python.packages import get_package_share_directory
 
 import pinocchio as pin
 
@@ -107,9 +108,14 @@ class MotionPlannerRealNode(Node):
         if urdf_path_param:
             urdf_path = Path(urdf_path_param)
         else:
-            # Default: look in tidybot_description package
-            urdf_path = Path(__file__).parent.parent.parent.parent / \
-                'tidybot_description/urdf/tidybot_wx250s.urdf.xacro'
+            # Default: prefer the installed package share directory for tidybot_description
+            try:
+                pkg_share = get_package_share_directory('tidybot_description')
+                urdf_path = Path(pkg_share) / 'urdf' / 'tidybot_wx250s.urdf.xacro'
+            except Exception:
+                # Fallback for running from a source workspace: assume repo layout
+                # Path(...).parents[4] should point to the workspace root (ros2_ws)
+                urdf_path = Path(__file__).resolve().parents[4] / 'src' / 'tidybot_description' / 'urdf' / 'tidybot_wx250s.urdf.xacro'
 
         if not urdf_path.exists():
             self.get_logger().error(f'URDF not found: {urdf_path}')

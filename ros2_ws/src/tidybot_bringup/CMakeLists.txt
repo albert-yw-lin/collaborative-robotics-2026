@@ -37,6 +37,7 @@ install(PROGRAMS
   scripts/diagnose_dynamixel.py
   scripts/example_state_machine.py
   scripts/trajectory_tracking.py
+  scripts/combined_arm_motion_with_grasping.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

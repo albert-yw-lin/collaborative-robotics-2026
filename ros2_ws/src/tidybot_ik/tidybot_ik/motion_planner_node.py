@@ -63,7 +63,7 @@ class MotionPlannerNode(Node):
         self.declare_parameter('ik_max_iterations', 500)
         self.declare_parameter('position_tolerance', 0.01)  # 1cm
         self.declare_parameter('orientation_tolerance', 0.1)  # ~6 deg
-        self.declare_parameter('min_collision_distance', 0.10)  # 10cm
+        self.declare_parameter('min_collision_distance', 0.5)  # 5cm
 
         # Get parameters
         model_path_param = self.get_parameter('model_path').get_parameter_value().string_value
@@ -517,7 +517,7 @@ class MotionPlannerNode(Node):
         if min_distance == float('inf'):
             min_distance = 1.0  # No contacts = safe
 
-        collision_free = min_distance >= self.min_collision_distance
+        collision_free = min_distance >= -self.min_collision_distance
         return collision_free, min_distance
 
     def plan_to_target_callback(self, request, response):

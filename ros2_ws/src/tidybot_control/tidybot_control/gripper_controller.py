@@ -164,7 +164,7 @@ class GripperController:
             while (time.time() - start_time) < duration:
                 self.right_pub.publish(msg)
                 self.left_pub.publish(msg)
-                rclpy.spin_once(self.node, timeout_sec=0.01)
+                # rclpy.spin_once(self.node, timeout_sec=0.01)
                 time.sleep(0.05)
         else:
             pwm = self.pwm_value  # Positive = open
@@ -172,7 +172,7 @@ class GripperController:
             while (time.time() - start_time) < duration:
                 self._publish_sdk('right', pwm)
                 self._publish_sdk('left', pwm)
-                rclpy.spin_once(self.node, timeout_sec=0.01)
+                # rclpy.spin_once(self.node, timeout_sec=0.01)
                 time.sleep(0.05)
             # Stop grippers
             self._publish_sdk('right', 0.0)

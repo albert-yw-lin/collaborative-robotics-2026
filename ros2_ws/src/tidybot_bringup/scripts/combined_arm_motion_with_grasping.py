@@ -57,15 +57,19 @@ class Combined_Arm_Gripper_Controller(Node):
         arm_name = request.arm_name.lower()
         self.get_logger().info(f"\n========== GRASP SEQUENCE STARTED FOR {arm_name.upper()} ARM ==========")
         
+        # ==========================================
         # Step 1: Open Gripper
+        # ==========================================
         self.get_logger().info("STEP 1: Opening gripper...")
         self.gripper.open(arm_name, duration=1.0)
         
-        # Step 2: Call Motion Planner (Async)
-        self.get_logger().info("STEP 2: Calling motion planner...")
+        # ==========================================
+        # Step 2: Call Motion Planner for Reaching (Async)
+        # ==========================================
+        self.get_logger().info("STEP 2: Calling motion planner to reach target...")
         future = self.plan_client.call_async(request)
 
-        # Wait for the future safely
+        # Wait for the reaching future safely
         wait_start = time.time()
         timeout_sec = 20.0
         
@@ -82,19 +86,70 @@ class Combined_Arm_Gripper_Controller(Node):
         if not plan_response.success:
             self.get_logger().error(f"STEP 2 ERROR: Planning failed -> {plan_response.message}")
             response.success = False
-            response.message = f"Failed at motion planning: {plan_response.message}"
+            response.message = f"Failed at reaching: {plan_response.message}"
             return response
 
-        self.get_logger().info("STEP 2: Motion planning successful!")
+        self.get_logger().info("STEP 2: Reach motion planning successful!")
 
+        # ==========================================
         # Step 3 & 4: Wait and Close Gripper
+        # ==========================================
         if request.execute:
-            self.get_logger().info(f"STEP 3: Waiting {request.duration}s for physical arm movement...")
+            self.get_logger().info(f"STEP 3: Waiting {request.duration}s for physical arm movement to reach...")
             time.sleep(request.duration)
 
-            self.get_logger().info("STEP 4: Target reached. Closing gripper...")
+            self.get_logger().info("STEP 4: Target reached. Closing gripper to grasp...")
             self.gripper.close(arm_name, duration=2.0)
-            response.message = "Grasp execution completed successfully."
+            
+            # ==========================================
+            # Step 5: Wait 1 second after grasping
+            # ==========================================
+            self.get_logger().info("STEP 5: Grasp complete. Waiting 1 second...")
+            time.sleep(1.0)
+            
+            # ==========================================
+            # Step 6: Lift the object to new position
+            # ==========================================
+            self.get_logger().info("STEP 6: Planning lift motion...")
+            lift_req = PlanToTarget.Request()
+            lift_req.arm_name = arm_name
+            # Set the new target position
+            lift_req.target_pose.position.x = 0.0
+            lift_req.target_pose.position.y = -0.3
+            lift_req.target_pose.position.z = 0.3
+            # Set the new target orientation
+            lift_req.target_pose.orientation.w = 0.7071
+            lift_req.target_pose.orientation.x = 0.0
+            lift_req.target_pose.orientation.y = 0.7071
+            lift_req.target_pose.orientation.z = 0.0
+            
+            lift_req.use_orientation = request.use_orientation
+            lift_req.execute = True
+            lift_req.duration = 5.0  # lift time
+            
+            lift_future = self.plan_client.call_async(lift_req)
+            
+            lift_wait_start = time.time()
+            while not lift_future.done():
+                if time.time() - lift_wait_start > timeout_sec:
+                    self.get_logger().error(f"STEP 6 ERROR: Lift motion planner timeout!")
+                    response.success = False
+                    response.message = "Lift motion planner service timeout."
+                    return response
+                time.sleep(0.05)
+                
+            lift_response = lift_future.result()
+            
+            if not lift_response.success:
+                self.get_logger().error(f"STEP 6 ERROR: Lift planning failed -> {lift_response.message}")
+                response.success = False
+                response.message = f"Failed at lift planning: {lift_response.message}"
+                return response
+                
+            self.get_logger().info(f"STEP 6: Lift planned successfully. Moving for {lift_req.duration}s...")
+            time.sleep(lift_req.duration)
+            
+            response.message = "Grasp and lift execution completed successfully."
         else:
             response.message = "Planning completed (execution skipped)."
 

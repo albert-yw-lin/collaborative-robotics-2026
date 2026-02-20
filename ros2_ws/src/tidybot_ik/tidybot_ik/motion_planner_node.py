@@ -63,7 +63,7 @@ class MotionPlannerNode(Node):
         self.declare_parameter('ik_max_iterations', 500)
         self.declare_parameter('position_tolerance', 0.01)  # 1cm
         self.declare_parameter('orientation_tolerance', 0.1)  # ~6 deg
-        self.declare_parameter('min_collision_distance', 0.5)  # 5cm
+        self.declare_parameter('min_collision_distance', 0.05)  # 5cm
 
         # Get parameters
         model_path_param = self.get_parameter('model_path').get_parameter_value().string_value
@@ -211,6 +211,8 @@ class MotionPlannerNode(Node):
             'right': self.create_publisher(ArmCommand, '/right_arm/cmd', 10),
             'left': self.create_publisher(ArmCommand, '/left_arm/cmd', 10),
         }
+
+        self.marker_pub = self.create_publisher(Pose, '/target_marker_pose', 10)
 
         # Subscriber for joint states
         self.joint_state_sub = self.create_subscription(
@@ -517,7 +519,7 @@ class MotionPlannerNode(Node):
         if min_distance == float('inf'):
             min_distance = 1.0  # No contacts = safe
 
-        collision_free = min_distance >= -self.min_collision_distance
+        collision_free = min_distance >= self.min_collision_distance
         return collision_free, min_distance
 
     def plan_to_target_callback(self, request, response):
@@ -541,6 +543,15 @@ class MotionPlannerNode(Node):
         # Convert target pose to SE3
         target_se3 = self.pose_to_se3(request.target_pose, request.use_orientation)
 
+        # Publish target pose as a marker for visualization (in world frame)
+        marker_pose = Pose()
+        world_translation = target_se3.translation()
+        marker_pose.position.x = float(world_translation[0])
+        marker_pose.position.y = float(world_translation[1])
+        marker_pose.position.z = float(world_translation[2])
+        self.marker_pub.publish(marker_pose)
+        # ===================================
+
         # Solve IK
         ik_success, solution, pos_error, ori_error = self.solve_ik(
             arm_name, target_se3, request.use_orientation, seed
@@ -549,13 +560,13 @@ class MotionPlannerNode(Node):
         response.position_error = pos_error
         response.orientation_error = ori_error
         response.joint_positions = solution.tolist()
-
+        self.get_logger().info('Investigating IK solution. . .')
         if not ik_success:
             response.success = False
             response.message = f"IK failed: position error={pos_error:.4f}m, orientation error={ori_error:.4f}rad"
             self.get_logger().warn(response.message)
             return response
-
+        self.get_logger().info('IK solution found. Checking singularity and collisions. . .')
         # Check singularity (Jacobian condition number)
         condition_number = self.compute_jacobian_condition(arm_name, solution)
         response.condition_number = condition_number
@@ -565,7 +576,7 @@ class MotionPlannerNode(Node):
             response.message = f"Near singularity: condition number={condition_number:.1f} > {request.max_condition_number}"
             self.get_logger().warn(response.message)
             return response
-
+        self.get_logger().info('Configuration is not near singularity. Checking collisions. . .')
         # Check arm-arm collision
         if arm_name == 'right':
             collision_free, min_dist = self.check_arm_collision(solution, other_arm_positions)
@@ -577,7 +588,7 @@ class MotionPlannerNode(Node):
             response.message = f"Arm collision detected: min distance={min_dist:.3f}m < {self.min_collision_distance}m"
             self.get_logger().warn(response.message)
             return response
-        
+        self.get_logger().info('No collisions at solution configuration. Validating path for collisions. . .')
         # Path validation
         steps = 20
         start_joints = self.get_arm_joint_positions(arm_name)
@@ -599,7 +610,7 @@ class MotionPlannerNode(Node):
                 self.get_logger().warn(response.message)
                 return response
 
-
+        self.get_logger().info('Path is collision-free. Planning successful. . .')
         # Planning succeeded
         response.success = True
         msg = f"Planning succeeded: pos_err={pos_error:.4f}m"

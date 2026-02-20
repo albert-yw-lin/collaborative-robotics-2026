@@ -324,7 +324,15 @@
         </body>
       </body>
     </body>
+    <body name="target_marker" mocap="true" pos="0 0 -1">
+     <geom type="sphere" size="0.03" rgba="1 0 0 0.5" contype="0" conaffinity="0"/>
+    </body>
+    <body name="test_box" pos="0.5 0.0 0.05">
+      <freejoint/>
+      <geom type="box" size="0.01 0.01 0.01" rgba="0.2 0.5 0.8 1" mass="0.1" contype="1" conaffinity="1"/>
+    </body>
   </worldbody>
+
 
   <actuator>
     <!-- Base actuators -->
@@ -367,12 +375,14 @@
     <key name="home" qpos="0 0 1.5708
       0 0
       0 0 0 0 0 0 0.037 0.037
-      0 0 0 0 0 0 0.037 0.037"
+      0 0 0 0 0 0 0.037 0.037
+      0.5 0 0.05 1 0 0 0"
       ctrl="0 0 1.5708 0 0 0 0 0 0 0 0 0.037 0.037 0 0 0 0 0 0 0.037 0.037"/>
     <key name="retract" qpos="0 0 1.5708
       0 0
       0 -0.5 1.57 0 0 0 0.037 0.037
-      0 -0.5 1.57 0 0 0 0.037 0.037"
+      0 -0.5 1.57 0 0 0 0.037 0.037
+      0.5 0 0.05 1 0 0 0"
       ctrl="0 0 1.5708 0 0 0 -0.5 1.57 0 0 0 0.037 0.037 0 -0.5 1.57 0 0 0 0.037 0.037"/>
   </keyframe>
 </mujoco>

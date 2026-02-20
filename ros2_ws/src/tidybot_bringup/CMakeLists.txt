@@ -41,4 +41,10 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  scripts/combined_arm_motion_with_grasping.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME combined_arm_gripper_controller
+)
+
 ament_package()

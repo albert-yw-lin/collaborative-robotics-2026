@@ -52,13 +52,32 @@ def main():
         aname = jname  # actuator name matches joint name
         right_arm_actuators[jname] = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, aname)
 
-    # Gripper
-    right_gripper_ctrl = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_fingers_actuator")
+    # Gripper actuators (position-controlled: 0.037=open, 0.015=closed)
+    right_finger_left_ctrl = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_left_finger")
+    right_finger_right_ctrl = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_right_finger")
+
+    # Finger joint qpos addresses
+    left_finger_qpos = model.jnt_qposadr[
+        mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "right_left_finger")
+    ]
+    right_finger_qpos = model.jnt_qposadr[
+        mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "right_right_finger")
+    ]
+
+    FINGER_OPEN = 0.037
+    FINGER_CLOSED = 0.015
 
     # ==========================================================================
     # Initialize
     # ==========================================================================
     mujoco.mj_resetData(model, data)
+
+    # Start with gripper open
+    data.qpos[left_finger_qpos] = FINGER_OPEN
+    data.qpos[right_finger_qpos] = FINGER_OPEN
+    data.ctrl[right_finger_left_ctrl] = FINGER_OPEN
+    data.ctrl[right_finger_right_ctrl] = FINGER_OPEN
+
     mujoco.mj_forward(model, data)
 
     # Get block position from simulation
@@ -151,9 +170,11 @@ def main():
 
             elif phase == "grasp":
                 target_pos = grasp_pos
-                # Close gripper gradually
+                # Close gripper gradually (interpolate open → closed)
                 gripper_progress = min((elapsed - 5.0) / 1.0, 1.0)
-                data.ctrl[right_gripper_ctrl] = gripper_progress * 255
+                finger_target = FINGER_OPEN + gripper_progress * (FINGER_CLOSED - FINGER_OPEN)
+                data.ctrl[right_finger_left_ctrl] = finger_target
+                data.ctrl[right_finger_right_ctrl] = finger_target
                 if elapsed > 6.0:
                     phase = "lift"
                     print("Phase: lift")
@@ -162,14 +183,16 @@ def main():
                 # Interpolate from grasp to lift
                 t = min((elapsed - 6.0) / 2.0, 1.0)
                 target_pos = grasp_pos + t * (lift_pos - grasp_pos)
-                data.ctrl[right_gripper_ctrl] = 255  # Keep closed
+                data.ctrl[right_finger_left_ctrl] = FINGER_CLOSED
+                data.ctrl[right_finger_right_ctrl] = FINGER_CLOSED
                 if elapsed > 8.0:
                     phase = "done"
                     print("Phase: done - pickup complete!")
 
             else:  # done
                 target_pos = lift_pos
-                data.ctrl[right_gripper_ctrl] = 255
+                data.ctrl[right_finger_left_ctrl] = FINGER_CLOSED
+                data.ctrl[right_finger_right_ctrl] = FINGER_CLOSED
 
             # ==================================================================
             # Solve IK

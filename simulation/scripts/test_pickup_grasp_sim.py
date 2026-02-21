@@ -83,14 +83,33 @@ def main():
             model, mujoco.mjtObj.mjOBJ_ACTUATOR, jname
         )
 
-    right_gripper_ctrl = mujoco.mj_name2id(
-        model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_fingers_actuator"
+    # Gripper actuators (position-controlled: 0.037=open, 0.015=closed)
+    right_finger_left_ctrl = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_left_finger"
     )
+    right_finger_right_ctrl = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_ACTUATOR, "right_right_finger"
+    )
+
+    # Finger joint qpos addresses (for initialization)
+    left_finger_qpos = model.jnt_qposadr[
+        mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "right_left_finger")
+    ]
+    right_finger_qpos = model.jnt_qposadr[
+        mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "right_right_finger")
+    ]
 
     # ==========================================================================
     # Initialize
     # ==========================================================================
     mujoco.mj_resetData(model, data)
+
+    # Start with gripper open
+    data.qpos[left_finger_qpos] = FINGER_OPEN_POS
+    data.qpos[right_finger_qpos] = FINGER_OPEN_POS
+    data.ctrl[right_finger_left_ctrl] = FINGER_OPEN_POS
+    data.ctrl[right_finger_right_ctrl] = FINGER_OPEN_POS
+
     mujoco.mj_forward(model, data)
 
     block_pos = data.xpos[block_body_id].copy()
@@ -174,8 +193,11 @@ def main():
 
             elif phase == "grasp":
                 target_pos = grasp_pos
+                # Interpolate fingers from open to closed
                 gripper_progress = min((elapsed - 5.0) / 1.0, 1.0)
-                data.ctrl[right_gripper_ctrl] = gripper_progress * 255
+                finger_target = FINGER_OPEN_POS + gripper_progress * (FINGER_CLOSED_POS - FINGER_OPEN_POS)
+                data.ctrl[right_finger_left_ctrl] = finger_target
+                data.ctrl[right_finger_right_ctrl] = finger_target
 
                 if elapsed > 6.0 and not grasp_checked:
                     # --- Grasp detection (same logic as GripperController) ---
@@ -196,14 +218,16 @@ def main():
             elif phase == "lift":
                 t = min((elapsed - 6.0) / 2.0, 1.0)
                 target_pos = grasp_pos + t * (lift_pos - grasp_pos)
-                data.ctrl[right_gripper_ctrl] = 255
+                data.ctrl[right_finger_left_ctrl] = FINGER_CLOSED_POS
+                data.ctrl[right_finger_right_ctrl] = FINGER_CLOSED_POS
                 if elapsed > 8.0:
                     phase = "done"
                     print("Phase: done — pickup complete!")
 
             else:  # done
                 target_pos = lift_pos
-                data.ctrl[right_gripper_ctrl] = 255
+                data.ctrl[right_finger_left_ctrl] = FINGER_CLOSED_POS
+                data.ctrl[right_finger_right_ctrl] = FINGER_CLOSED_POS
 
             # ==================================================================
             # Solve IK

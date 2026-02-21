@@ -21,8 +21,9 @@
     <light pos="0 0 1.5" directional="true"/>
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
 
-    <!-- Block to pick up - positioned farther in front of the robot -->
-    <body name="block" pos="0.55 -0.15 0.025">
+    <!-- Block to pick up - in front of the right arm -->
+    <!-- Robot faces -Y; right arm shoulder is at ~(-0.15, -0.12, 0.45) -->
+    <body name="block" pos="-0.15 -0.40 0.025">
       <freejoint name="block_joint"/>
       <geom name="block_geom" type="box" size="0.025 0.025 0.025" mass="0.1" material="block_material"
         friction="1.0 0.5 0.5" solref="0.01 1" solimp="0.99 0.99 0.001"/>

@@ -79,6 +79,17 @@ def main():
         orientation_cost=1.0,
     )
 
+    # Freeze all joints EXCEPT the right arm so IK only moves the arm
+    right_arm_set = set(right_arm_joints)
+    vel_limits = {}
+    for i in range(model.njnt):
+        jname = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, i)
+        if jname and jname not in right_arm_set:
+            jtype = model.jnt_type[i]
+            if jtype != mujoco.mjtJoint.mjJNT_FREE:
+                vel_limits[jname] = np.array([1e-10])
+    freeze_limits = mink.VelocityLimit(model, vel_limits)
+
     # Top-down grasp orientation: gripper pointing down
     # Quaternion (wxyz) for 180 degree rotation around X-axis (gripper pointing down)
     # This rotates the gripper to point straight down for top-down grasping
@@ -104,8 +115,8 @@ def main():
         # Camera setup
         viewer.cam.distance = 1.2
         viewer.cam.elevation = -30
-        viewer.cam.azimuth = 150
-        viewer.cam.lookat[:] = [0.4, -0.1, 0.2]
+        viewer.cam.azimuth = 180
+        viewer.cam.lookat[:] = [-0.15, -0.30, 0.2]
 
         # Show coordinate frames (body frames)
         viewer.opt.frame = mujoco.mjtFrame.mjFRAME_BODY
@@ -173,7 +184,7 @@ def main():
             )
             ee_task.set_target(target_pose)
 
-            # Solve IK
+            # Solve IK (with frozen non-arm joints)
             for _ in range(ik_steps_per_sim_step):
                 vel = mink.solve_ik(
                     configuration,
@@ -181,6 +192,7 @@ def main():
                     dt=dt,
                     solver="quadprog",
                     damping=1e-3,
+                    limits=[freeze_limits],
                 )
                 configuration.integrate_inplace(vel, dt)
 

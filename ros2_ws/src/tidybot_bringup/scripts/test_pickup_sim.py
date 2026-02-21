@@ -2,8 +2,8 @@
 """
 TidyBot2 Block Pickup with Grasp Detection (ROS2 Simulation)
 
-Picks up a block using the right arm with IK planning and verifies
-the grasp using GripperController.check_grasp().
+Picks up a block using the right arm via PlanToTarget IK service and
+verifies the grasp using GripperController.check_grasp().
 
 Usage:
     # Terminal 1: Start simulation with the pickup scene
@@ -21,7 +21,7 @@ from tidybot_control.gripper_controller import GripperController
 import time
 
 
-# Block position from scene_pickup.xml (world frame = base_link when base is at origin)
+# Block position from scene_pickup.xml (world frame = base_link when base at origin)
 BLOCK_POS = (0.55, -0.15, 0.025)
 
 # Offsets above the block centre
@@ -29,8 +29,7 @@ APPROACH_HEIGHT = 0.15   # 15 cm above block
 GRASP_HEIGHT = 0.06      # fingertips at block top
 LIFT_HEIGHT = 0.20       # lift to 20 cm above block
 
-# Top-down grasp orientation (fingers pointing down) in base_link frame
-# quaternion (qw, qx, qy, qz)
+# Top-down grasp orientation (fingers pointing down) — quaternion (qw, qx, qy, qz)
 ORIENT_FINGERS_DOWN = (0.5, 0.5, 0.5, -0.5)
 
 
@@ -50,9 +49,6 @@ class TestPickup(Node):
             self.get_logger().info('  Service not available, waiting...')
         self.get_logger().info('Service connected!')
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
     def make_pose(self, x, y, z):
         """Create a Pose with fingers-down orientation."""
         qw, qx, qy, qz = ORIENT_FINGERS_DOWN
@@ -86,15 +82,12 @@ class TestPickup(Node):
         result = future.result()
         if result.success:
             self.get_logger().info(f'  OK — pos_err={result.position_error:.4f}m')
-            time.sleep(duration + 0.5)  # wait for motion to finish
+            time.sleep(duration + 0.5)
             return True
         else:
             self.get_logger().warn(f'  FAILED: {result.message}')
             return False
 
-    # ------------------------------------------------------------------
-    # Main pickup sequence
-    # ------------------------------------------------------------------
     def run(self):
         bx, by, bz = BLOCK_POS
         self.get_logger().info(f'Block at ({bx}, {by}, {bz})')
@@ -105,15 +98,13 @@ class TestPickup(Node):
 
         # 2 — Approach (above the block)
         self.get_logger().info('[2/5] Moving to approach position...')
-        approach = self.make_pose(bx, by, bz + APPROACH_HEIGHT)
-        if not self.plan_and_execute(approach, duration=2.5):
+        if not self.plan_and_execute(self.make_pose(bx, by, bz + APPROACH_HEIGHT), duration=2.5):
             self.get_logger().error('Could not reach approach pose — aborting.')
             return
 
         # 3 — Descend to grasp height
         self.get_logger().info('[3/5] Descending to grasp position...')
-        grasp = self.make_pose(bx, by, bz + GRASP_HEIGHT)
-        if not self.plan_and_execute(grasp, duration=2.0):
+        if not self.plan_and_execute(self.make_pose(bx, by, bz + GRASP_HEIGHT), duration=2.0):
             self.get_logger().error('Could not reach grasp pose — aborting.')
             return
 
@@ -127,8 +118,7 @@ class TestPickup(Node):
 
         # 5 — Lift
         self.get_logger().info('[5/5] Lifting...')
-        lift = self.make_pose(bx, by, bz + LIFT_HEIGHT)
-        self.plan_and_execute(lift, duration=2.0)
+        self.plan_and_execute(self.make_pose(bx, by, bz + LIFT_HEIGHT), duration=2.0)
 
         self.get_logger().info('')
         self.get_logger().info('=' * 40)

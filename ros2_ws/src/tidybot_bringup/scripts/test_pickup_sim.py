@@ -22,7 +22,7 @@ import time
 
 
 # Block position from scene_pickup.xml (world frame = base_link when base at origin)
-BLOCK_POS = (0.55, -0.15, 0.025)
+BLOCK_POS = (-0.15, -0.40, 0.025)
 
 # Offsets above the block centre
 APPROACH_HEIGHT = 0.15   # 15 cm above block

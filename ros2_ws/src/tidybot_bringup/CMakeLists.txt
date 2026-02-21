@@ -36,6 +36,7 @@ install(PROGRAMS
   scripts/test_tf.py
   scripts/test_planner_real.py
   scripts/diagnose_dynamixel.py
+  scripts/test_pickup_sim.py
   scripts/example_state_machine.py
   scripts/trajectory_tracking.py
   DESTINATION lib/${PROJECT_NAME}

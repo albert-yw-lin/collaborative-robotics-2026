@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Combined Arm & Gripper Controller Node for TidyBot2.
+Combined Arm & Gripper Controller Node for TidyBot2 (Real Hardware Version).
 
 This node acts as an integration layer to test the manipulation pipeline 
 (motion planning + gripper control) independently from the terminal.
@@ -17,11 +17,12 @@ from rclpy.executors import MultiThreadedExecutor
 from tidybot_msgs.srv import PlanToTarget
 from tidybot_control.gripper_controller import GripperController
 
-class Combined_Arm_Gripper_Controller(Node):
+class Combined_Arm_Gripper_Controller_Real(Node):
     def __init__(self):
         super().__init__('combined_arm_gripper_controller')
 
-        self.declare_parameter('gripper_mode', 'sim')
+        # [MODIFIED FOR REAL ROBOT]: Default gripper mode changed to 'real'
+        self.declare_parameter('gripper_mode', 'real')
         gripper_mode = self.get_parameter('gripper_mode').get_parameter_value().string_value
 
         # Separate callback groups for Server and Client to avoid starvation
@@ -65,6 +66,9 @@ class Combined_Arm_Gripper_Controller(Node):
         self.get_logger().info("STEP 1: Opening gripper...")
         self.gripper.open(arm_name, duration=1.0)
         
+        # [MODIFIED FOR REAL ROBOT]: Added small hardware settling time
+        time.sleep(0.5)
+        
         # ==========================================
         # Step 2: Pre-grasp Hover (Target X, Y with Z=0.4)
         # ==========================================
@@ -74,11 +78,11 @@ class Combined_Arm_Gripper_Controller(Node):
         hover_req.arm_name = arm_name
         hover_req.target_pose.position.x = request.target_pose.position.x
         hover_req.target_pose.position.y = request.target_pose.position.y
-        hover_req.target_pose.position.z = 0.4  # 강제로 z를 0.4로 설정
+        hover_req.target_pose.position.z = 0.4  #
         hover_req.target_pose.orientation = request.target_pose.orientation
         hover_req.use_orientation = request.use_orientation
         hover_req.execute = request.execute
-        hover_req.duration = 5.0  # Hover 위치로 가는 데 걸리는 시간 (필요에 따라 조절 가능)
+        hover_req.duration = 5.0  # 
 
         self.get_logger().info("STEP 2: Calling motion planner to generate IK solution for hover position...")
         hover_future = self.plan_client.call_async(hover_req)
@@ -105,6 +109,8 @@ class Combined_Arm_Gripper_Controller(Node):
         if request.execute:
             self.get_logger().info(f"STEP 2-1: Executing physical arm movement to hover position... Waiting {hover_req.duration}s")
             time.sleep(hover_req.duration)
+            # [MODIFIED FOR REAL ROBOT]: Wait for arm to physically settle
+            time.sleep(0.5)
 
 
         # ==========================================
@@ -137,6 +143,8 @@ class Combined_Arm_Gripper_Controller(Node):
         if request.execute:
             self.get_logger().info(f"STEP 3-1: Executing physical arm descent to target... Waiting {request.duration}s")
             time.sleep(request.duration)
+            # [MODIFIED FOR REAL ROBOT]: Wait for arm to physically settle before grasping
+            time.sleep(0.5)
 
             # ==========================================
             # Step 4: Close Gripper
@@ -147,28 +155,26 @@ class Combined_Arm_Gripper_Controller(Node):
             # ==========================================
             # Step 5: Wait 1 second after grasping
             # ==========================================
-            self.get_logger().info("STEP 5: Grasp complete. Waiting 1 second...")
+            self.get_logger().info("STEP 5: Grasp complete. Waiting 1 second for steady grip...")
             time.sleep(1.0)
             
             # ==========================================
             # Step 6: Lift the object to new position
             # ==========================================
-            self.get_logger().info("STEP 6: Planning lift motion...")
+            self.get_logger().info("STEP 6: Planning vertical lift motion...")
             lift_req = PlanToTarget.Request()
             lift_req.arm_name = arm_name
-            # Set the new target position
+            
             lift_req.target_pose.position.x = 0.0
             lift_req.target_pose.position.y = -0.3
             lift_req.target_pose.position.z = 0.3
-            # Set the new target orientation
-            lift_req.target_pose.orientation.w = 0.7071
-            lift_req.target_pose.orientation.x = 0.0
-            lift_req.target_pose.orientation.y = 0.7071
-            lift_req.target_pose.orientation.z = 0.0
+            
+            # Keep the same orientation used for grasping
+            lift_req.target_pose.orientation = request.target_pose.orientation
             
             lift_req.use_orientation = request.use_orientation
             lift_req.execute = True
-            lift_req.duration = 5.0  # lift time
+            lift_req.duration = 4.0  # lift time
             
             self.get_logger().info("STEP 6: Calling motion planner to generate IK solution for lift...")
             lift_future = self.plan_client.call_async(lift_req)
@@ -207,7 +213,7 @@ class Combined_Arm_Gripper_Controller(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = Combined_Arm_Gripper_Controller()
+    node = Combined_Arm_Gripper_Controller_Real()
     
     executor = MultiThreadedExecutor(num_threads=4)
     executor.add_node(node)

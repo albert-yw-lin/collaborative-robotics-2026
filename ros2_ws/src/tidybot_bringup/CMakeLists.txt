@@ -39,15 +39,7 @@ install(PROGRAMS
   scripts/test_pickup_sim.py
   scripts/example_state_machine.py
   scripts/trajectory_tracking.py
-  scripts/combined_arm_motion_with_grasping.py
-  scripts/combined_arm_motion_with_grasping_real.py
   DESTINATION lib/${PROJECT_NAME}
-)
-
-install(PROGRAMS
-  scripts/combined_arm_motion_with_grasping.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME combined_arm_gripper_controller
 )
 
 ament_package()

@@ -6,6 +6,10 @@ __pycache__/
 .Python
 *.egg-info/
 
+
+build/
+install/
+log/
 # Virtual environments
 .venv/
 venv/
